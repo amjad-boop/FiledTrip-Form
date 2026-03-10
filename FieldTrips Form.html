@@ -556,7 +556,7 @@
 <div class="container">
 
   <!-- Apps Script URL — hidden from users, edit only here -->
-  <input type="hidden" id="apiKey" value="https://script.google.com/macros/s/AKfycbxCLCIKz8BM0H4fO4Nhl9cTkVllV0FM1WWslHY6YZrpVl7AyyynLnjyync8VyF82eLw/exec" />
+  <input type="hidden" id="apiKey" value="https://script.google.com/macros/s/AKfycbzUMWmyKQHhQYeTUn_mGic2w5zJplyop9jpNd7X-lp6LvQ-zHGXjWHKVupRqW62dEzb/exec" />
 
   <!-- Form -->
   <div class="form-card">
@@ -806,23 +806,14 @@
 
     try {
       const payload = JSON.stringify({ sheetName: 'LEADS', row });
+      const params = new URLSearchParams({ payload });
 
-      // Use a hidden form POST — works with Google auth sessions
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = url;
-      form.target = 'hidden_iframe';
-      form.style.display = 'none';
-
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'payload';
-      input.value = payload;
-      form.appendChild(input);
-
-      document.body.appendChild(form);
-      form.submit();
-      setTimeout(() => document.body.removeChild(form), 3000);
+      await fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString()
+      });
 
       showToast('Lead submitted successfully! 🎉', 'success');
       setTimeout(resetForm, 1800);
@@ -852,34 +843,25 @@ GOOGLE APPS SCRIPT — Extensions → Apps Script
 Replace ALL existing code with this, then re-deploy.
 ══════════════════════════════════════════════════════
 
-function doGet(e) {
-  // Handle lead submission via GET
-  if (e.parameter.payload) {
-    try {
-      var data = JSON.parse(decodeURIComponent(e.parameter.payload));
-      var sheetName = data.sheetName || 'LEADS';
-      var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-      if (!sheet) throw new Error('Sheet not found: ' + sheetName);
-      var targetRow = findNextEmptyRow(sheetName);
-      if (targetRow === -1) throw new Error('Could not find target row');
-      var row = data.row;
-      for (var col = 0; col < row.length; col++) {
-        sheet.getRange(targetRow, col + 1).setValue(row[col]);
-      }
-      return ContentService
-        .createTextOutput(JSON.stringify({ status: 'ok', rowWritten: targetRow }))
-        .setMimeType(ContentService.MimeType.JSON);
-    } catch(err) {
-      return ContentService
-        .createTextOutput(JSON.stringify({ status: 'error', msg: err.toString() }))
-        .setMimeType(ContentService.MimeType.JSON);
+function findNextEmptyRow() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("LEADS");
+  if (!sheet) { Logger.log("Sheet LEADS not found."); return -1; }
+  var data = sheet.getDataRange().getValues();
+  var nextEmptyRow = data.length + 1;
+  for (var i = 9; i < data.length; i++) {
+    if (data[i].every(function(cell) { return cell === ""; })) {
+      nextEmptyRow = i + 1;
+      break;
     }
   }
+  Logger.log("Next empty row: " + nextEmptyRow);
+  return nextEmptyRow;
+}
 
-  // Handle get user
+function doGet(e) {
   if (e.parameter.action === 'getUser') {
     var user = Session.getActiveUser().getEmail();
-    var name = user.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+    var name = user.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
     return ContentService
       .createTextOutput(JSON.stringify({ name: name, email: user }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -888,38 +870,24 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    // Parse from URLSearchParams (sent by the lead form)
-    var raw = e.parameter.payload || e.postData.contents;
+    var raw = (e.parameter && e.parameter.payload)
+              ? e.parameter.payload
+              : e.postData.contents;
     var data = JSON.parse(raw);
-    var sheetName = data.sheetName || 'LEADS';
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-
-    if (!sheet) {
-      return ContentService
-        .createTextOutput(JSON.stringify({ status: 'error', msg: 'Sheet not found: ' + sheetName }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    var targetRow = findNextEmptyRow(sheetName);
-
-    if (targetRow === -1) {
-      return ContentService
-        .createTextOutput(JSON.stringify({ status: 'error', msg: 'Could not find target row' }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("LEADS");
+    if (!sheet) throw new Error("Sheet LEADS not found");
+    var targetRow = findNextEmptyRow();
+    if (targetRow === -1) throw new Error("Could not find target row");
     var row = data.row;
     for (var col = 0; col < row.length; col++) {
       sheet.getRange(targetRow, col + 1).setValue(row[col]);
     }
-
     return ContentService
-      .createTextOutput(JSON.stringify({ status: 'ok', rowWritten: targetRow }))
+      .createTextOutput(JSON.stringify({ status: "ok", rowWritten: targetRow }))
       .setMimeType(ContentService.MimeType.JSON);
-
   } catch(err) {
     return ContentService
-      .createTextOutput(JSON.stringify({ status: 'error', msg: err.toString() }))
+      .createTextOutput(JSON.stringify({ status: "error", msg: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
@@ -927,8 +895,7 @@ function doPost(e) {
 ══════════════════════════════════════════════════════
 IMPORTANT — When deploying:
   • Execute as: Me
-  • Who has access: Anyone (within your organization)
-  • This allows the page to read the logged-in user's name
+  • Who has access: Anyone
 ══════════════════════════════════════════════════════
 -->
 </body>
