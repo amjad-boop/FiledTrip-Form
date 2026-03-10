@@ -759,7 +759,7 @@
     const btn = document.getElementById('submitBtn');
     const url = document.getElementById('apiKey').value.trim();
 
-    if (!url || url === 'https://script.google.com/a/macros/lazywait.com/s/AKfycbwX9wzoTQXbNk7FcHB97jp7OUhdEPAqDN1iN_fh__t5b2vOkUxRfleGfx6Npi87zjjy/exec') {
+    if (!url || url === '') {
       showToast('Script URL not configured.', 'error'); return;
     }
 
