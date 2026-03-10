@@ -497,6 +497,8 @@
 </head>
 <body>
 
+<iframe name="hidden_iframe" style="display:none;"></iframe>
+
 <!-- LOGIN OVERLAY -->
 <div class="login-overlay" id="loginOverlay">
   <div class="logo-wrap">
@@ -553,7 +555,6 @@
 <!-- MAIN -->
 <div class="container">
 
-  
   <!-- Apps Script URL — hidden from users, edit only here -->
   <input type="hidden" id="apiKey" value="https://script.google.com/macros/s/AKfycby7ZUnAfp1AVafEl4lYegm5X3IZNBpQep-czJF2Ie7bTd_mOCqm4lel_4GXS43gUNYt/exec" />
 
@@ -804,15 +805,29 @@
     ];
 
     try {
-      const params = new URLSearchParams();
-      params.append('payload', JSON.stringify({ sheetName: 'LEADS', row }));
+      const payload = JSON.stringify({ sheetName: 'LEADS', row });
 
-      await fetch(url, { method:'POST', mode:'no-cors', body: params });
+      // Use a hidden form POST — works with Google auth sessions
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = url;
+      form.target = 'hidden_iframe';
+      form.style.display = 'none';
+
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'payload';
+      input.value = payload;
+      form.appendChild(input);
+
+      document.body.appendChild(form);
+      form.submit();
+      setTimeout(() => document.body.removeChild(form), 3000);
 
       showToast('Lead submitted successfully! 🎉', 'success');
       setTimeout(resetForm, 1800);
     } catch(e) {
-      showToast('Submission failed. Check your URL.', 'error');
+      showToast('Submission failed: ' + e.message, 'error');
     }
 
     btn.classList.remove('loading'); btn.disabled=false;
@@ -838,20 +853,35 @@ Replace ALL existing code with this, then re-deploy.
 ══════════════════════════════════════════════════════
 
 function doGet(e) {
-  var action = e && e.parameter && e.parameter.action;
-  if (action === 'getUser') {
-    var user = Session.getActiveUser().getEmail();
-    var name = '';
+  // Handle lead submission via GET
+  if (e.parameter.payload) {
     try {
-      // Try to get display name from contacts (works in Workspace orgs)
-      var people = People.People.get('people/me', {personFields: 'names'});
-      name = people.names && people.names[0] ? people.names[0].displayName : '';
-    } catch(err) {}
-    // Fallback: use the part before @ in the email
-    if (!name) name = user.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-    var response = { name: name, email: user };
+      var data = JSON.parse(decodeURIComponent(e.parameter.payload));
+      var sheetName = data.sheetName || 'LEADS';
+      var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+      if (!sheet) throw new Error('Sheet not found: ' + sheetName);
+      var targetRow = findNextEmptyRow(sheetName);
+      if (targetRow === -1) throw new Error('Could not find target row');
+      var row = data.row;
+      for (var col = 0; col < row.length; col++) {
+        sheet.getRange(targetRow, col + 1).setValue(row[col]);
+      }
+      return ContentService
+        .createTextOutput(JSON.stringify({ status: 'ok', rowWritten: targetRow }))
+        .setMimeType(ContentService.MimeType.JSON);
+    } catch(err) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ status: 'error', msg: err.toString() }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  // Handle get user
+  if (e.parameter.action === 'getUser') {
+    var user = Session.getActiveUser().getEmail();
+    var name = user.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
     return ContentService
-      .createTextOutput(JSON.stringify(response))
+      .createTextOutput(JSON.stringify({ name: name, email: user }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
