@@ -553,6 +553,7 @@
 <!-- MAIN -->
 <div class="container">
 
+  
   <!-- Apps Script URL — hidden from users, edit only here -->
   <input type="hidden" id="apiKey" value="https://script.google.com/a/macros/lazywait.com/s/AKfycbwX9wzoTQXbNk7FcHB97jp7OUhdEPAqDN1iN_fh__t5b2vOkUxRfleGfx6Npi87zjjy/exec" />
 
@@ -759,7 +760,7 @@
     const btn = document.getElementById('submitBtn');
     const url = document.getElementById('apiKey').value.trim();
 
-    if (!url || url === '') {
+    if (!url) {
       showToast('Script URL not configured.', 'error'); return;
     }
 
